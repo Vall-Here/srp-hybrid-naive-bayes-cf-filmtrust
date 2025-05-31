@@ -626,64 +626,66 @@ def compute_likelihood_itembased(ratings, u, i, y, alpha=0.01, R=8):
     return product
 
 
-def predict_rating(ratings, u, i, prior_userbased, prior_itembased,plausible_rating, alpha=0.01, mode='hybrid'):
+def predict_rating(ratings, u, i, prior_userbased, prior_itembased,plausible_rating, alpha=1):
     scores = []
-    # all_likelihood_user = []  
-    # all_likelihood_item = []
-    all_combined = []
+    all_likelihood_user = []  
+    all_likelihood_item = []
     R = len(plausible_rating)  
+    
+    
+    len_Iu = sum(1 for j in range(len(ratings[0])) if ratings[u][j] != 0)
+    len_Ui = sum(1 for v in range(len(ratings)) if ratings[v][i] != 0)
 
     y_index = 0
     for y in plausible_rating:
-        # print(y_index)
         prior_user = prior_userbased[y_index][i]
         prior_item = prior_itembased[y_index][u]
+    
 
-      
-        # print(likelihood_item)
+        likelihood_user = compute_likelihood_userbased(ratings, u, i, y, alpha, R)
+        likelihood_item = compute_likelihood_itembased(ratings, u, i, y, alpha, R)
+        
+        # simpan sebagai justifikasi
+        all_likelihood_user.append(likelihood_user)
+        all_likelihood_item.append(likelihood_item)
+        
+        
+        score_item = (Decimal(prior_item) * likelihood_item) ** Decimal(1 / (1 + len_Ui)) if len_Ui > 0 else 0
+        score_user = (Decimal(prior_user) * likelihood_user) ** Decimal(1 / (1 + len_Iu)) if len_Iu > 0 else 0
 
-        # all_likelihood_user.append(likelihood_user)
-        # all_likelihood_item.append(likelihood_item)
-
-        if mode == 'user':
-            likelihood_user = compute_likelihood_userbased(ratings, u, i, y, alpha, R)
-            score = Decimal(prior_user) * likelihood_user
-        elif mode == 'item':
-            likelihood_item = compute_likelihood_itembased(ratings, u, i, y, alpha, R)
-            score = Decimal(prior_item) * likelihood_item
-        else:  # hybrid
-            
-            
-            likelihood_user = compute_likelihood_userbased(ratings, u, i, y, alpha, R)
-            likelihood_item = compute_likelihood_itembased(ratings, u, i, y, alpha, R)
-            
-            
-            len_Iu = sum(1 for j in range(len(ratings[0])) if ratings[u][j] != 0 and j != i)
-            len_Ui = sum(1 for v in range(len(ratings)) if v != u and ratings[v][i] != 0)
-
-            score_user = (Decimal(prior_user) * likelihood_user) ** Decimal(1 / (1 + len_Iu)) if len_Iu > 0 else 0
-            score_item = (Decimal(prior_user) * likelihood_user) ** Decimal(1 / (1 + len_Ui)) if len_Ui > 0 else 0
-
-            score = score_user * score_item
+        score = score_user * score_item
 
         scores.append(score)
-        all_combined.append(score)
         y_index += 1
 
-    # predicted_rating = scores.index(max(scores)) + 1
     predicted_rating = plausible_rating[scores.index(max(scores))]
 
     return predicted_rating, {
         'scores': scores,
-        # 'likelihood_user': all_likelihood_user,
-        # 'likelihood_item': all_likelihood_item,
-        'combined_score': all_combined
+        'likelihood_user': all_likelihood_user,
+        'likelihood_item': all_likelihood_item
     }
 
 
 
 
 from sklearn.model_selection import train_test_split
+
+full_df = pd.read_csv('./film-trust/ratings.txt', sep=' ', names=['user', 'item', 'rating'])
+user_ids = full_df['user'].unique()
+item_ids = full_df['item'].unique()
+user_map = {uid: idx for idx, uid in enumerate(user_ids)}
+item_map = {iid: idx for idx, iid in enumerate(item_ids)}
+
+# Split dataset
+full_df['user_idx'] = full_df['user'].map(user_map)
+full_df['item_idx'] = full_df['item'].map(item_map)
+train_df, test_df = train_test_split(full_df[['user_idx', 'item_idx', 'rating']], test_size=0.2, random_state=42)
+
+print(f"\nTrain set: {len(train_df)} ratings ({len(train_df)/len(full_df)*100:.1f}%)")
+print(f"Test set: {len(test_df)} ratings ({len(test_df)/len(full_df)*100:.1f}%)")
+train_df.to_csv('./film-trust/train.txt', sep=' ', header=False, index=False)
+test_df.to_csv('./film-trust/test.txt', sep=' ', header=False, index=False)
 
 
 temp_df = pd.read_csv("./film-trust/ratings.txt", sep=' ', engine='python', names=['rating'])
